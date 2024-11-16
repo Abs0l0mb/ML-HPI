@@ -5,10 +5,48 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.decomposition import PCA
 from sklearn.metrics import make_scorer
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder
+from scipy.signal import savgol_filter
+from scipy.stats import zscore
+
+def pre_process_data(file_path):
+    """
+    Preprocess the dataset:
+    - Drop 'sample_name' and 'prod_substance' columns.
+    - Convert string keys in 'device_serial', 'substance_form_display', and 'measure_type_display' to numeric values.
+    
+    Args:
+        file_path (str): Path to the CSV file.
+
+    Returns:
+        pd.DataFrame: Preprocessed dataset.
+    """
+    # Load the dataset
+    df = pd.read_csv(file_path)
+
+    # Drop unnecessary columns
+    columns_to_drop = ['sample_name', 'prod_substance']
+    df = df.drop(columns=columns_to_drop, errors='ignore')
+    
+    # Encode string columns to numeric values
+    string_columns = ['device_serial', 'substance_form_display', 'measure_type_display']
+    for col in string_columns:
+        if col in df.columns:
+            encoder = LabelEncoder()
+            df[col] = encoder.fit_transform(df[col])
+
+    spectrum = df.iloc[:, 4:]
+    spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 0))
+    spectrum_filtered_standardized = pd.DataFrame(zscore(spectrum_filtered, axis = 1))
+
+    combined_df = pd.concat([df.iloc[:, :4], spectrum_filtered_standardized], axis=1)
+    return df#combined_df
 
 # Load data
-data = pd.read_csv("./data/train.csv")
-X = data.iloc[:, 6:]  # Spectral data columns
+data = pre_process_data("./data/train.csv")
+print(data)
+X = data.drop(columns=['PURITY'])
 y = data['PURITY']    # Target variable (purity)
 
 # Split data into train and test sets
@@ -22,10 +60,12 @@ def purity_score(y_true, y_pred):
 # Custom scorer
 custom_scorer = make_scorer(purity_score, greater_is_better=True)
 
+'''
 # Apply PCA for dimensionality reduction
 pca = PCA(n_components=20)  # Example number; adjust based on prior tuning. TWEAK 
 X_train_pca = pca.fit_transform(X_train)
 X_test_pca = pca.transform(X_test)
+'''
 
 # Optuna objective function
 def objective(trial):
@@ -41,10 +81,10 @@ def objective(trial):
         min_samples_split=min_samples_split,
         random_state=42
     )
-    model.fit(X_train_pca, y_train)
+    model.fit(X_train, y_train)
 
     # Cross-validate and return custom purity score
-    cv_score = cross_val_score(model, X_train_pca, y_train, cv=5, scoring=custom_scorer).mean()
+    cv_score = cross_val_score(model, X_train, y_train, cv=5, scoring=custom_scorer).mean()
     return cv_score
 
 # Run Optuna optimization
@@ -62,9 +102,10 @@ best_rf_model = RandomForestRegressor(
     min_samples_split=best_params["min_samples_split"],
     random_state=42
 )
-best_rf_model.fit(X_train_pca, y_train)
+best_rf_model.fit(X_train, y_train)
 
 # Evaluate the model on test data
-y_pred = best_rf_model.predict(X_test_pca)
+y_pred = best_rf_model.predict(X_test)
+print(y_pred)
 final_score = purity_score(y_test, y_pred)
 print(f"Final Optimized Random Forest Custom Purity Score (within ±5% range): {final_score:.4f}")

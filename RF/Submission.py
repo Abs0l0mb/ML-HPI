@@ -1,11 +1,11 @@
 import pandas as pd
 import joblib
-import utils
+import RF.Utils as Utils
 
 best_rf_model = joblib.load("../models/random_forest_model.joblib")
 
 test_data = pd.read_csv("../data/test.csv")
-X_test_data = utils.pre_process_data("../data/test.csv", False)
+X_test_data = Utils.pre_process_data("../data/test.csv", False)
 print(X_test_data)
 
 predicted_purity = best_rf_model.predict(X_test_data)

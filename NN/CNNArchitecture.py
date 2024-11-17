@@ -59,7 +59,7 @@ class CustomLoss(nn.Module):
         return total_penalty.mean()
 
 # Load the dataset
-file_path = './data/train.csv'  # Adjust path if needed
+file_path = '../data/train.csv'  # Adjust path if needed
 # Preprocess data
 metadata, spectrum, spectrum_filtered, target = pre_process_data(file_path)
 

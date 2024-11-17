@@ -123,5 +123,5 @@ print(f"Test Loss (MSE): {test_loss / len(test_loader):.4f}")
 print(f"Accuracy (% within ±5%): {accuracy:.2f}%")
 
 # Save the model
-torch.save(model.state_dict(), '/mnt/data/spectral_nn_model.pth')
-print("Model saved to /mnt/data/spectral_nn_model.pth")
+#torch.save(model.state_dict(), './data/spectral_nn_model.pth')
+#print("Model saved to ./data/spectral_nn_model.pth")

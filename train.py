@@ -39,9 +39,8 @@ def pre_process_data(file_path):
             df[col] = encoder.fit_transform(df[col])
 
     spectrum = df.iloc[:, 4:]
-    spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 0))
-    spectrum_filtered_standardized = pd.DataFrame(zscore(spectrum_filtered, axis = 1))
-
+    spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 0), columns=spectrum.columns)
+    spectrum_filtered_standardized = pd.DataFrame(zscore(spectrum_filtered, axis = 1), columns=spectrum.columns)
     combined_df = pd.concat([df.iloc[:, :4], spectrum_filtered_standardized], axis=1)
     return df#combined_df
 

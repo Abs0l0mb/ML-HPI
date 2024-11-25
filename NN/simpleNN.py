@@ -1,76 +1,15 @@
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import LabelEncoder
-import pandas as pd
-from scipy.signal import savgol_filter
-from scipy.stats import zscore
+import Utils as utils
 
-
-def pre_process_data(file_path):
-    """
-    Preprocess the dataset:
-    - Drop 'sample_name' and 'prod_substance' columns.
-    - Convert string keys in 'device_serial', 'substance_form_display', and 'measure_type_display' to numeric values.
-    
-    Args:
-        file_path (str): Path to the CSV file.
-
-    Returns:
-        pd.DataFrame: Preprocessed dataset.
-    """
-    # Load the dataset
-    df = pd.read_csv(file_path)
-
-
-    # Drop unnecessary columns
-    columns_to_drop = ['sample_name', 'prod_substance']
-    df = df.drop(columns=columns_to_drop, errors='ignore')
-    
-    # Encode string columns to numeric values
-    string_columns = ['device_serial', 'substance_form_display', 'measure_type_display']
-    for col in string_columns:
-        if col in df.columns:
-            encoder = LabelEncoder()
-            df[col] = encoder.fit_transform(df[col])
-
-    spectrum = df.iloc[:, 4:]
-    spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 0))
-    spectrum_filtered_standardized = pd.DataFrame(zscore(spectrum_filtered, axis = 1))
-
-    combined_df = pd.concat([df, spectrum_filtered_standardized], axis=1)
-    return combined_df
-
-class CustomLoss(nn.Module):
-    def __init__(self, tolerance=0.05):
-        super(CustomLoss, self).__init__()
-        self.tolerance = tolerance  # Define the tolerance for ±5%
-
-    def forward(self, predictions, targets):
-        """
-        Forward pass of the loss function.
-        Computes the penalty for predictions outside the ±tolerance range.
-        """
-        lower_bound = targets * (1 - self.tolerance)
-        upper_bound = targets * (1 + self.tolerance)
-        
-        # Calculate penalties for being out of bounds
-        below_bound_penalty = torch.relu(lower_bound - predictions)  # Predictions too low
-        above_bound_penalty = torch.relu(predictions - upper_bound)  # Predictions too high
-        
-        # Total penalty is the sum of both
-        total_penalty = below_bound_penalty + above_bound_penalty
-        
-        # Mean penalty across the batch
-        return total_penalty.mean()
 
 # Load the dataset
-file_path = './data/train.csv'  # Adjust path if needed
-df = pre_process_data(file_path)
+file_path = '../data/train.csv'  # Adjust path if needed
+df = utils.pre_process_data(file_path, False, True)
 
 # Extract features and target
 target_column = 'PURITY'  # Adjust if necessary
@@ -117,11 +56,11 @@ class SimpleNN(nn.Module):
 # Initialize model, loss, and optimizer
 input_size = X_train.shape[1]
 model = SimpleNN(input_size)
-criterion = CustomLoss(tolerance=0.05)
+criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training Loop
-num_epochs = 50
+num_epochs = 200
 for epoch in range(num_epochs):
     model.train()
     epoch_loss = 0
@@ -167,5 +106,5 @@ print(f"Test Loss (Fraction of Failures): {test_loss / len(test_loader):.4f}")
 print(f"Accuracy (% within ±5%): {accuracy:.2f}%")
 
 # Save the model
-torch.save(model.state_dict(), './purity_prediction_model.pth')
+# torch.save(model.state_dict(), './purity_prediction_model.pth')
 print("Model saved to ./purity_prediction_model.pth")

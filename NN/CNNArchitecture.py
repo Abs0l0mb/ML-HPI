@@ -1,217 +1,193 @@
-import pandas as pd
+import shap
 import torch
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.preprocessing import LabelEncoder
-import pandas as pd
-from scipy.signal import savgol_filter
-from scipy.stats import zscore
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.metrics import mean_squared_error
+import Utils as utils
+from PurityPredictionModel import PurityPredictionModel
 
-def pre_process_data(file_path):
-    # Load the dataset
-    df = pd.read_csv(file_path)
+# Load and Preprocess Data
+file_path = '../data/train.csv'  # Adjust path if necessary
+data = utils.pre_process_data(file_path, False, False)
 
-    # Drop unnecessary columns
-    columns_to_drop = ['sample_name', 'prod_substance']
-    df = df.drop(columns=columns_to_drop, errors='ignore')
-    
-    # Encode string columns to numeric values
-    string_columns = ['device_serial', 'substance_form_display', 'measure_type_display']
-    for col in string_columns:
-        if col in df.columns:
-            encoder = LabelEncoder()
-            df[col] = encoder.fit_transform(df[col])
+metadata = data.iloc[:, :3]  # Assuming first three columns are metadata
+spectrum = data.iloc[:, 4:]  # All columns except target
+target = data.iloc[:, 4] 
 
-    # Extract spectrum and perform processing
-    spectrum = df.iloc[:, 4:]
-    spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv=2, axis=0))
-    spectrum_filtered_standardized = pd.DataFrame(zscore(spectrum_filtered, axis=1))
 
-    # Combine metadata and spectrum data
-    metadata = df.iloc[:, :3]
-    print(metadata)
-    return metadata, spectrum, spectrum_filtered_standardized, df['PURITY']
-
-class CustomLoss(nn.Module):
-    def __init__(self, tolerance=0.05):
-        super(CustomLoss, self).__init__()
-        self.tolerance = tolerance  # Define the tolerance for ±5%
-
-    def forward(self, predictions, targets):
-        """
-        Forward pass of the loss function.
-        Computes the penalty for predictions outside the ±tolerance range.
-        """
-        lower_bound = targets * (1 - self.tolerance)
-        upper_bound = targets * (1 + self.tolerance)
-        
-        # Calculate penalties for being out of bounds
-        below_bound_penalty = abs(lower_bound - predictions)  # Predictions too low
-        above_bound_penalty = abs(predictions - upper_bound)  # Predictions too high
-        
-        # Total penalty is the sum of both
-        total_penalty = below_bound_penalty + above_bound_penalty
-        
-        # Mean penalty across the batch
-        return total_penalty.mean()
-
-# Load the dataset
-file_path = '../data/train.csv'  # Adjust path if needed
-# Preprocess data
-metadata, spectrum, spectrum_filtered, target = pre_process_data(file_path)
-
-# Convert to NumPy arrays
-metadata = metadata.values
-spectrum = spectrum.values
-spectrum_filtered = spectrum_filtered.values
-target = target.values
-
-# Split data into training and testing sets
-meta_train, meta_test, spec_train, spec_test, spec_fil_train, spec_fil_test, y_train, y_test = train_test_split(
-    metadata, spectrum, spectrum_filtered, target, test_size=0.2, random_state=42
+# Split data into train and test sets
+meta_train, meta_test, spec_train, spec_test, y_train, y_test = train_test_split(
+    metadata, spectrum, target, test_size=0.2#, random_state=42
 )
 
-# Standardize metadata
-scaler = StandardScaler()
-meta_train = scaler.fit_transform(meta_train)
-meta_test = scaler.transform(meta_test)
+# Split training set into training and validation
+meta_train, meta_val, spec_train, spec_val, y_train, y_val = train_test_split(
+    meta_train, spec_train, y_train, test_size=0.2#, random_state=42
+)
 
-# Convert to PyTorch tensors
-meta_train_tensor = torch.tensor(meta_train, dtype=torch.float32)
-meta_test_tensor = torch.tensor(meta_test, dtype=torch.float32)
-spec_train_tensor = torch.tensor(spec_train, dtype=torch.float32)
-spec_test_tensor = torch.tensor(spec_test, dtype=torch.float32)
-spec_fil_train_tensor = torch.tensor(spec_fil_train, dtype=torch.float32)
-spec_fil_test_tensor = torch.tensor(spec_fil_test, dtype=torch.float32)
-y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
-y_test_tensor = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
+print(meta_train, meta_val, meta_test)
 
-# Create DataLoader for batching
-train_dataset = TensorDataset(meta_train_tensor, spec_train_tensor, spec_fil_train_tensor, y_train_tensor)
-test_dataset = TensorDataset(meta_test_tensor, spec_test_tensor, spec_fil_test_tensor, y_test_tensor)
+# Convert data to PyTorch tensors
+device_serial_tensor = torch.tensor(meta_train.iloc[:, 0].values, dtype=torch.long)
+substance_form_tensor = torch.tensor(meta_train.iloc[:, 1].values, dtype=torch.long)
+measure_type_tensor = torch.tensor(meta_train.iloc[:, 2].values, dtype=torch.long)
+device_serial_val_tensor = torch.tensor(meta_val.iloc[:, 0].values, dtype=torch.long)
+substance_form_val_tensor = torch.tensor(meta_val.iloc[:, 1].values, dtype=torch.long)
+measure_type_val_tensor = torch.tensor(meta_val.iloc[:, 2].values, dtype=torch.long)
+spec_val_tensor = torch.tensor(spec_val.values, dtype=torch.float32)
+y_val_tensor = torch.tensor(y_val.values, dtype=torch.float32).view(-1, 1)
+
+spec_train_tensor = torch.tensor(spec_train.values, dtype=torch.float32)
+spec_test_tensor = torch.tensor(spec_test.values, dtype=torch.float32)
+
+y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
+y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).view(-1, 1)
+
+# Test tensors for metadata
+device_serial_test_tensor = torch.tensor(meta_test.iloc[:, 0].values, dtype=torch.long)
+substance_form_test_tensor = torch.tensor(meta_test.iloc[:, 1].values, dtype=torch.long)
+measure_type_test_tensor = torch.tensor(meta_test.iloc[:, 2].values, dtype=torch.long)
+
+# Create DataLoaders for batching
+train_dataset = TensorDataset(device_serial_tensor, substance_form_tensor, measure_type_tensor, spec_train_tensor, y_train_tensor)
+val_dataset = TensorDataset(device_serial_val_tensor, substance_form_val_tensor, measure_type_val_tensor, spec_val_tensor, y_val_tensor)
+test_dataset = TensorDataset(device_serial_test_tensor, substance_form_test_tensor, measure_type_test_tensor, spec_test_tensor, y_test_tensor)
+
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
-class ComplexNN(nn.Module):
-    def __init__(self, spectrum_input_size, spectrum_fil_size, metadata_input_size):
-        super(ComplexNN, self).__init__()
-        
-        # Spectrum branch (using convolutional layers)
-        self.spectrum_branch = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=16, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(in_channels=16, out_channels=32, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Flatten()
-        )
-        
-        # Calculate output size after convolution and pooling
-        conv_output_size = spectrum_input_size // 4  # Adjust based on the number of pooling layers
-        
-        # Spectrum branch (using convolutional layers)
-        self.spectrum_fil_branch = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=16, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Conv1d(in_channels=16, out_channels=32, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2, stride=2),
-            nn.Flatten()
-        )
-        
-        # Calculate output size after convolution and pooling
-        conv_output_size = spectrum_fil_size // 4  # Adjust based on the number of pooling layers
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0, path='best_model.pth'):
+        """
+        Args:
+            patience (int): How many epochs to wait after the last time validation loss improved.
+            delta (float): Minimum change in validation loss to qualify as an improvement.
+            path (str): Path to save the best model.
+        """
+        self.patience = patience
+        self.delta = delta
+        self.path = path
+        self.best_loss = float('inf')
+        self.counter = 0
+        self.early_stop = False
 
-        # Metadata branch
-        self.metadata_branch = nn.Sequential(
-            nn.Linear(metadata_input_size, 64),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(64, 32),
-            nn.ReLU()
-        )
-        
-        # Fusion layer
-        self.fusion_layer = nn.Sequential(
-            nn.Linear(conv_output_size * 32 + conv_output_size * 32 + 32, 128),  # Combining spectrum and metadata features
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1)  # Single output for predicting PURITY
-        )
+    def __call__(self, val_loss, model):
+        if val_loss < self.best_loss - self.delta:
+            self.best_loss = val_loss
+            self.counter = 0
+            torch.save(model.state_dict(), self.path)  # Save the best model
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
 
-    def forward(self, spectrum_data, spectrum_fil_data, metadata_data):
-        # Forward pass through spectrum branch
-        spectrum_data = spectrum_data.unsqueeze(1)  # Add channel dimension for Conv1d
-        spectrum_features = self.spectrum_branch(spectrum_data)
-        
-        spectrum_fil_data = spectrum_fil_data.unsqueeze(1)  # Add channel dimension for Conv1d
-        spectrum_fil_features = self.spectrum_fil_branch(spectrum_data)
+# Initialize Model
+num_devices = metadata.iloc[:, 0].nunique()
+num_substance_forms = metadata.iloc[:, 1].nunique()
+num_measure_types = metadata.iloc[:, 2].nunique()
+spectrum_input_size = spec_train.shape[1]
 
-        # Forward pass through metadata branch
-        metadata_features = self.metadata_branch(metadata_data)
-        
-        # Concatenate features from both branches
-        combined_features = torch.cat((spectrum_features, spectrum_fil_features, metadata_features), dim=1)
-        
-        # Final prediction
-        output = self.fusion_layer(combined_features)
-        return output
+print(num_devices, num_substance_forms, num_measure_types, spectrum_input_size)
 
-# Initialize model, loss, and optimizer
+model = PurityPredictionModel(num_devices, num_substance_forms, num_measure_types, spectrum_input_size)
 
-# Sizes of metadata and spectrum data
-meta_data_size = meta_train_tensor.shape[1]  # Number of features in metadata
-spectrum_size = spec_train_tensor.shape[1]  # Number of features in spectrum data
-spectrum_fil_size = spec_fil_train_tensor.shape[1]  # Number of features in spectrum data
+# Define Loss and Optimizer
+criterion = nn.HuberLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.005)
 
-# Initialize the ComplexNN model
-model = ComplexNN(spectrum_size, spectrum_fil_size, meta_data_size)
+# Train Model
+early_stopping = EarlyStopping(patience=1000, delta=0, path='best_model.pth')
 
-# Custom loss function
-criterion = CustomLoss(tolerance=0.05)
-
-# Optimizer
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# Training Loop
-num_epochs = 50
+num_epochs = 1000
 for epoch in range(num_epochs):
+    # Training Phase
     model.train()
-    epoch_loss = 0
-    for batch_meta, batch_spec, batch_spec_fil, batch_y in train_loader:
-        # Forward pass
-        outputs = model(batch_spec, batch_spec_fil, batch_meta)
+    train_loss = 0
+    for batch_device, batch_form, batch_type, batch_spec, batch_y in train_loader:
+        outputs = model((batch_spec, batch_device, batch_form, batch_type))
         loss = criterion(outputs, batch_y)
         
-        # Backward pass and optimization
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         
-        epoch_loss += loss.item()
+        train_loss += loss.item()
     
-    print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss / len(train_loader):.4f}")
+    # Validation Phase
+    model.eval()
+    val_loss = 0
+    with torch.no_grad():
+        for batch_device, batch_form, batch_type, batch_spec, batch_y in val_loader:
+            outputs = model((batch_spec, batch_device, batch_form, batch_type))
+            loss = criterion(outputs, batch_y)
+            val_loss += loss.item()
+    
+    # Average losses
+    train_loss /= len(train_loader)
+    val_loss /= len(val_loader)
+    
+    print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+    
+    # Early Stopping
+    early_stopping(val_loss, model)
+    if early_stopping.early_stop:
+        print("Early stopping triggered.")
+        break
 
-# Evaluate the model
+# Load the best model
+model.load_state_dict(torch.load('best_model.pth'))
+
+
+
+
+def shap():
+    # Prepare data for SHAP
+    model.eval()
+    def model_predict(inputs):
+        spectrum, device_serial, substance_form, measure_type = inputs
+        with torch.no_grad():
+            return model((spectrum, device_serial, substance_form, measure_type)).cpu().numpy()
+
+    test_input = (
+        spec_test_tensor,
+        device_serial_test_tensor, 
+        substance_form_test_tensor, 
+        measure_type_test_tensor
+    )
+
+    combined_test_input = torch.cat([
+        spec_test_tensor,
+        device_serial_test_tensor.unsqueeze(1).float(),
+        substance_form_test_tensor.unsqueeze(1).float(),
+        measure_type_test_tensor.unsqueeze(1).float()
+    ], dim=1)
+
+    explainer = shap.GradientExplainer(model, test_input)
+    shap_values = explainer.shap_values(test_input)
+    shap.summary_plot(shap_values, test_input)
+
+
+
+
+
+
+
+# Evaluate Model
 model.eval()
 test_loss = 0
 correct_guesses = 0
 total_samples = 0
-
+y_pred = []
+y_true = []
 with torch.no_grad():
-    for batch_meta, batch_spec, batch_spec_fil, batch_y in test_loader:
-        # Forward pass
-        outputs = model(batch_spec, batch_spec_fil, batch_meta)
-        loss = criterion(outputs, batch_y)
-        test_loss += loss.item()
-        
+    for batch_device, batch_form, batch_type, batch_spec, batch_y in test_loader:
+        outputs = model((batch_spec, batch_device, batch_form, batch_type))
+        y_pred.extend(outputs.view(-1).cpu().numpy())
+        y_true.extend(batch_y.view(-1).cpu().numpy())
+
         # Calculate correct guesses within ±5%
         tolerance = 0.05
         lower_bound = batch_y * (1 - tolerance)
@@ -221,11 +197,9 @@ with torch.no_grad():
         correct_guesses += correct
         total_samples += batch_y.size(0)
 
-# Calculate accuracy
-accuracy = (correct_guesses / total_samples) * 100
-print(f"Test Loss (Fraction of Failures): {test_loss / len(test_loader):.4f}")
-print(f"Accuracy (% within ±5%): {accuracy:.2f}%")
+# Calculate MSE
+mse = mean_squared_error(y_true, y_pred)
+print(f"Test MSE: {mse:.4f}")
 
-# Save the model
-torch.save(model.state_dict(), './purity_prediction_model.pth')
-print("Model saved to ./purity_prediction_model.pth")
+accuracy = (correct_guesses / total_samples) * 100
+print(f"Accuracy (% within ±5%): {accuracy:.2f}%")

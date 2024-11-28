@@ -1,3 +1,4 @@
+import pickle
 import pandas as pd
 import torch
 import Utils as utils
@@ -11,45 +12,59 @@ model = PurityPredictionModel(
     125  # Replace with the number of features in your spectrum
 )
 
+with open('encoders.pkl', 'rb') as f:
+    encoders = pickle.load(f)
+
+print("Encoders loaded from encoders.pkl")
+
 # Load the saved weights
 model.load_state_dict(torch.load('best_model.pth'))
 model.eval()  # Set the model to evaluation mode
 
+# Load and preprocess test data
 file_path = '../data/test.csv'  # Adjust path if necessary
-data = utils.pre_process_data(file_path, False, False)
+data = utils.pre_process_data(file_path, False, False, False, encoders)
 
+# Split metadata and spectrum
 metadata = data.iloc[:, :3]  # Assuming first three columns are metadata
 spectrum = data.iloc[:, 3:]  # All columns except target
 
+# Convert data to tensors
 device_serial_test_tensor = torch.tensor(metadata['device_serial'].values, dtype=torch.long)
 substance_form_test_tensor = torch.tensor(metadata['substance_form_display'].values, dtype=torch.long)
 measure_type_test_tensor = torch.tensor(metadata['measure_type_display'].values, dtype=torch.long)
 spec_test_tensor = torch.tensor(spectrum.values, dtype=torch.float32)
 
-# Create a DataLoader for batching (if needed)
-test_dataset = torch.utils.data.TensorDataset(
-    spec_test_tensor, 
-    device_serial_test_tensor, 
-    substance_form_test_tensor, 
-    measure_type_test_tensor
+# Print debug information
+print(f"Max index in test measure_type: {metadata['measure_type_display'].max()}")
+print(f"Embedding size for measure_type: {model.measure_type_embedding.num_embeddings}")
+print(f"Max index in test device_serial: {metadata['device_serial'].max()}")
+print(f"Embedding size for device_serial: {model.device_embedding.num_embeddings}")
+print(f"Max index in test substance_form_display: {metadata['substance_form_display'].max()}")
+print(f"Embedding size for substance_form_display: {model.substance_form_embedding.num_embeddings}")
+
+max_train_index_device = model.device_embedding.num_embeddings - 1
+max_train_index_form = model.substance_form_embedding.num_embeddings - 1
+max_train_index_measure = model.measure_type_embedding.num_embeddings - 1
+
+# Assign unseen classes to default value
+metadata['device_serial'] = metadata['device_serial'].apply(
+    lambda x: x if x <= max_train_index_device else 0
 )
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=False)
+metadata['substance_form_display'] = metadata['substance_form_display'].apply(
+    lambda x: x if x <= max_train_index_form else 0
+)
+metadata['measure_type_display'] = metadata['measure_type_display'].apply(
+    lambda x: x if x <= max_train_index_measure else 0
+)
 
-print(f"Max index in test substance_form: {metadata['measure_type_display'].max()}")
-print(f"Embedding size for substance_form: {model.measure_type_embedding.num_embeddings}")
-
-
-# Generate predictions
-predictions = []
+# Run the entire test data through the model
 with torch.no_grad():
-    for batch_spec, batch_device, batch_form, batch_type in test_loader:
-        outputs = model((batch_spec, batch_device, batch_form, batch_type))
-        predictions.extend(outputs.view(-1).cpu().numpy())
-
-print(predictions)
+    predictions = model((spec_test_tensor, device_serial_test_tensor, substance_form_test_tensor, measure_type_test_tensor))
+    predictions = predictions.view(-1).cpu().numpy()  # Convert to a NumPy array
 
 # Load the sample submission file (if provided by the competition)
-submission = pd.DataFrame({'ID': test_data['Id'], 'PURITY': predictions})  # Adjust 'Id' to match your test file
+submission = pd.DataFrame({'ID': data.index+1, 'PURITY': predictions})  # Adjust 'Id' to match your test file
 
 # Save to CSV
 submission.to_csv('submission.csv', index=False)

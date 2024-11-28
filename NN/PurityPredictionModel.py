@@ -35,7 +35,7 @@ class PurityPredictionModel(nn.Module):
             nn.ReLU(),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(32, 1)  # Regression output
+            nn.Linear(32, 1),  # Regression output
         )
     
     def forward(self, inputs):

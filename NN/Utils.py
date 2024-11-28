@@ -1,3 +1,4 @@
+import pickle
 import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
@@ -5,7 +6,7 @@ from scipy.stats import zscore
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from xgboost import XGBClassifier
 
-def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_classif: bool):
+def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_classif: bool, save_encoders: bool, encoders: None | object = None):
     """
     Preprocess the dataset:
     - Drop 'sample_name' and 'prod_substance' columns.
@@ -25,13 +26,29 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
     # Drop columns
     columns_to_drop = ['sample_name', 'prod_substance']
     df = df.drop(columns=columns_to_drop, errors='ignore')
-
+    
     # Label encoder
-    string_columns = ['device_serial', 'substance_form_display', 'measure_type_display']
-    for col in string_columns:
-        if col in df.columns:
-            encoder = LabelEncoder()
-            df[col] = encoder.fit_transform(df[col])
+    if(encoders == None):    
+        encoders = {
+            'device_serial': LabelEncoder(),
+            'substance_form_display': LabelEncoder(),
+            'measure_type_display': LabelEncoder()
+        }
+
+        encoders['device_serial'].fit(df['device_serial'])
+        encoders['substance_form_display'].fit(df['substance_form_display'])
+        encoders['measure_type_display'].fit(df['measure_type_display'])
+
+    df['device_serial'] = safe_transform(df['device_serial'], encoders['device_serial'])
+    df['substance_form_display'] = safe_transform(df['substance_form_display'], encoders['substance_form_display'])
+    df['measure_type_display'] = safe_transform(df['measure_type_display'], encoders['measure_type_display'])
+
+    # Save the encoders to a file
+    if(save_encoders):
+        with open('encoders.pkl', 'wb') as f:
+            pickle.dump(encoders, f)
+
+    print("Encoders saved to encoders.pkl")
 
     # Tranform spectrum
     if transform_spectrum:
@@ -49,6 +66,13 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
         df['substance_class'] = predictions
 
     return df
+
+def safe_transform(column, encoder, default_value=0):
+    """Safely transform a column using a LabelEncoder, mapping unseen values to a default."""
+    known_classes = set(encoder.classes_)  # Get the known classes from the encoder
+    #print(known_classes)
+    column_mapped = column.apply(lambda x: x if x in known_classes else encoder.classes_[0])  # Map unseen labels
+    return encoder.transform(column_mapped)
 
 def savgol(spectrum):
     spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 0), columns=spectrum.columns)

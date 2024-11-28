@@ -1,4 +1,3 @@
-import shap
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -6,7 +5,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import mean_squared_error
 import Utils as utils
-from SpectrumPredictionModel import SpectrumPredictionModel
+from NN.CNNModel import SpectrumPredictionModel
 
 # Load and Preprocess Data
 file_path = '../data/train.csv'  # Adjust path if necessary

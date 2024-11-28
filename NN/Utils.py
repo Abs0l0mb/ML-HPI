@@ -1,10 +1,11 @@
 import pickle
 import numpy as np
 import pandas as pd
+import torch
 from scipy.signal import savgol_filter
 from scipy.stats import zscore
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from xgboost import XGBClassifier
+from IRCNNModel import IRClassificationCNN
 
 def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_classif: bool, save_encoders: bool, encoders: None | object = None):
     """
@@ -57,20 +58,28 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
         df = pd.concat([df.iloc[:, :4], spectrum_filtered_standardized], axis=1)
 
     if add_substance_classif:
-        substance_model = XGBClassifier()
-        substance_model.load_model('../models/xgboost_classifier_model.json')
-        spectrum_data = df.iloc[:, 4:] 
+
+        df_substances = pd.read_csv('../data/substances.csv')
+        num_substance_classes = df_substances.iloc[:, 0].nunique()
+
+        substance_model = IRClassificationCNN(125, num_substance_classes)
+        substance_model.load_state_dict(torch.load("ir_classification_cnn.pth"))
+        substance_model.eval()
+
         scaler = StandardScaler()
-        scaled_data = scaler.fit_transform(spectrum_data)
-        predictions = substance_model.predict(scaled_data)
-        df['substance_class'] = predictions
+        ir_data_scaled = scaler.fit_transform(df.iloc[:, 4:].astype(np.float32))
+        ir_data_scaled = torch.tensor(ir_data_scaled)
+
+        with torch.no_grad():
+            predictions = substance_model(ir_data_scaled)
+            predicted_classes = predictions.argmax(dim=1).tolist()
+        df['predicted_substance'] = predicted_classes
 
     return df
 
 def safe_transform(column, encoder, default_value=0):
     """Safely transform a column using a LabelEncoder, mapping unseen values to a default."""
     known_classes = set(encoder.classes_)  # Get the known classes from the encoder
-    #print(known_classes)
     column_mapped = column.apply(lambda x: x if x in known_classes else encoder.classes_[0])  # Map unseen labels
     return encoder.transform(column_mapped)
 

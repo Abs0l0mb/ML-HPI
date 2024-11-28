@@ -2,7 +2,7 @@ import pickle
 import pandas as pd
 import torch
 import Utils as utils
-from SpectrumPredictionModel import SpectrumPredictionModel
+from NN.CNNModel import SpectrumPredictionModel
 
 # Load the model structure
 model = SpectrumPredictionModel(

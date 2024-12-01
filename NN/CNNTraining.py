@@ -12,11 +12,10 @@ from FCCNNModel import FCCNNModel
 file_path = '../data/train.csv'  # Adjust path if necessary
 data = utils.pre_process_data(file_path, False, True, True)
 
-metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -1]], axis=1)  # Assuming first three columns are metadata and last is predicted substance
-spectrum = data.iloc[:, 4:]  # All columns except target
+metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -1]], axis=1) # Assuming first three columns are metadata and last is predicted substance
+spectrum = data.iloc[:, 4:].drop(columns='predicted_substance') # All columns except target
 target = data.iloc[:, 3]/100 # Get purity percentage as float
-
-print(metadata, target)
+#print(metadata, target)
 
 # Split data into train and test sets
 meta_train, meta_test, spec_train, spec_test, y_train, y_test = train_test_split(
@@ -95,18 +94,24 @@ spectrum_input_size = spec_train.shape[1]
 
 print(num_devices, num_substance_forms, num_measure_types, num_predicted_substance, spectrum_input_size)
 
-model = FCCNNModel(num_devices, num_substance_forms, num_measure_types, num_predicted_substance, spectrum_input_size)
+model = FCCNNModel(num_devices, num_substance_forms, num_measure_types, num_predicted_substance)
 
 # Define Loss and Optimizer
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
 # Train Model
 early_stopping = EarlyStopping(patience=50, delta=0, path='best_model.pth')
 
 num_epochs = 1000
 for epoch in range(num_epochs):
+    
     # Training Phase
+    train_correct_guesses = 0
+    train_total_samples = 0
+    correct_guesses = 0
+    total_samples = 0
+
     model.train()
     train_loss = 0
     for batch_device, batch_form, batch_type, batch_predicted_substance, batch_spec, batch_y in train_loader:
@@ -119,6 +124,12 @@ for epoch in range(num_epochs):
         optimizer.step()
         
         train_loss += loss.item()
+
+        train_lower_bound = batch_y - 0.05
+        train_upper_bound = batch_y + 0.05
+        train_correct = ((outputs >= train_lower_bound) & (outputs <= train_upper_bound)).sum().item()
+        train_correct_guesses += train_correct
+        train_total_samples += batch_y.size(0)
     
     # Validation Phase
     model.eval()
@@ -128,12 +139,20 @@ for epoch in range(num_epochs):
             outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_predicted_substance))
             loss = criterion(outputs, batch_y)
             val_loss += loss.item()
-    
+            
+            lower_bound = batch_y - 0.05
+            upper_bound = batch_y + 0.05
+            correct = ((outputs >= lower_bound) & (outputs <= upper_bound)).sum().item()
+            correct_guesses += correct
+            total_samples += batch_y.size(0)
+
     # Average losses
     train_loss /= len(train_loader)
     val_loss /= len(val_loader)
-    
-    print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+    train_accuracy = (train_correct_guesses / train_total_samples) * 100
+    val_accuracy = (correct_guesses / total_samples) * 100
+
+    print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Train Accuracy : {train_accuracy:.2f}%, Val Accuracy: {val_accuracy:.2f}%")
     
     # Early Stopping
     early_stopping(val_loss, model)

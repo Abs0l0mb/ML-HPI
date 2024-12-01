@@ -6,11 +6,10 @@ from FCCNNModel import FCCNNModel
 
 # Load the model structure
 model = FCCNNModel(
-    48,  # Replace with the number of unique device_serial values in your train set
-    3,  # Replace with the number of unique substance_form values in your train set
-    2,  # Replace with the number of unique measure_type values in your train set
-    87,
-    125  # Replace with the number of features in your spectrum
+    48,  # 48 device serial classes
+    3,  # 3 substance form classes
+    2,  # 2 measure type classes
+    87, # 87 substance prediction classes
 )
 
 with open('encoders.pkl', 'rb') as f:
@@ -28,7 +27,7 @@ data = utils.pre_process_data(file_path, False, True, False, encoders)
 
 # Split metadata and spectrum
 metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -1]], axis=1)  # Assuming first three columns are metadata and last is predicted substance
-spectrum = data.iloc[:, 3:]  # All columns except target
+spectrum = data.iloc[:, 3:].drop(columns='predicted_substance')  # All columns except target
 
 # Convert data to tensors
 device_serial_test_tensor = torch.tensor(metadata['device_serial'].values, dtype=torch.long)

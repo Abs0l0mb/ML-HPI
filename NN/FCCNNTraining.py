@@ -29,7 +29,7 @@ meta_train, meta_val, spec_train, spec_val, y_train, y_val = train_test_split(
 
 #print(meta_train, meta_val, meta_test)
 
-# Convert data to PyTorch tensors
+# Convert training data to PyTorch tensors
 device_serial_tensor = torch.tensor(meta_train.iloc[:, 0].values, dtype=torch.long)
 substance_form_tensor = torch.tensor(meta_train.iloc[:, 1].values, dtype=torch.long)
 measure_type_tensor = torch.tensor(meta_train.iloc[:, 2].values, dtype=torch.long)
@@ -37,6 +37,7 @@ predicted_substance_tensor = torch.tensor(meta_train.iloc[:, 3].values, dtype=to
 spec_train_tensor = torch.tensor(spec_train.values, dtype=torch.float32)
 y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
 
+# Convert validation data to PyTorch tensors
 device_serial_val_tensor = torch.tensor(meta_val.iloc[:, 0].values, dtype=torch.long)
 substance_form_val_tensor = torch.tensor(meta_val.iloc[:, 1].values, dtype=torch.long)
 measure_type_val_tensor = torch.tensor(meta_val.iloc[:, 2].values, dtype=torch.long)
@@ -44,6 +45,7 @@ predicted_substance_val_tensor = torch.tensor(meta_val.iloc[:, 3].values, dtype=
 spec_val_tensor = torch.tensor(spec_val.values, dtype=torch.float32)
 y_val_tensor = torch.tensor(y_val.values, dtype=torch.float32).view(-1, 1)
 
+# Convert test data to PyTorch tensors
 device_serial_test_tensor = torch.tensor(meta_test.iloc[:, 0].values, dtype=torch.long)
 substance_form_test_tensor = torch.tensor(meta_test.iloc[:, 1].values, dtype=torch.long)
 measure_type_test_tensor = torch.tensor(meta_test.iloc[:, 2].values, dtype=torch.long)
@@ -92,8 +94,6 @@ num_measure_types = metadata.iloc[:, 2].nunique()
 num_predicted_substance = 87
 spectrum_input_size = spec_train.shape[1]
 
-print(num_devices, num_substance_forms, num_measure_types, num_predicted_substance, spectrum_input_size)
-
 model = FCCNNModel(num_devices, num_substance_forms, num_measure_types, num_predicted_substance)
 
 # Define Loss and Optimizer
@@ -101,7 +101,7 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
 # Train Model
-early_stopping = EarlyStopping(patience=50, delta=0, path='best_model.pth')
+early_stopping = EarlyStopping(patience=20, delta=0, path='best_model.pth')
 
 num_epochs = 1000
 for epoch in range(num_epochs):

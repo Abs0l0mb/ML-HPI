@@ -7,12 +7,15 @@ class IRClassificationCNN(nn.Module):
         
         self.cnn = nn.Sequential(
             nn.Conv1d(1, 16, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(16),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2),
             nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2),
             nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2),
             nn.Flatten()

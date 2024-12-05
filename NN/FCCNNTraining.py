@@ -11,9 +11,8 @@ from FCCNNModel import FCCNNModel
 # Load and Preprocess Data
 file_path = '../data/train.csv'  # Adjust path if necessary
 data = utils.pre_process_data(file_path, False, True, True)
-
-metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -1]], axis=1) # Assuming first three columns are metadata and last is predicted substance
-spectrum = data.iloc[:, 4:].drop(columns='predicted_substance') # All columns except target
+metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -87:]], axis=1) # Assuming first three columns are metadata and last is predicted substance
+spectrum = data.iloc[:, 4:].iloc[:, :-87] # All columns except target
 target = data.iloc[:, 3]/100 # Get purity percentage as float
 #print(metadata, target)
 
@@ -33,7 +32,7 @@ meta_train, meta_val, spec_train, spec_val, y_train, y_val = train_test_split(
 device_serial_tensor = torch.tensor(meta_train.iloc[:, 0].values, dtype=torch.long)
 substance_form_tensor = torch.tensor(meta_train.iloc[:, 1].values, dtype=torch.long)
 measure_type_tensor = torch.tensor(meta_train.iloc[:, 2].values, dtype=torch.long)
-predicted_substance_tensor = torch.tensor(meta_train.iloc[:, 3].values, dtype=torch.long)
+predicted_substance_tensor = torch.tensor(meta_train.iloc[:, -87:].values, dtype=torch.float32)
 spec_train_tensor = torch.tensor(spec_train.values, dtype=torch.float32)
 y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
 
@@ -41,7 +40,7 @@ y_train_tensor = torch.tensor(y_train.values, dtype=torch.float32).view(-1, 1)
 device_serial_val_tensor = torch.tensor(meta_val.iloc[:, 0].values, dtype=torch.long)
 substance_form_val_tensor = torch.tensor(meta_val.iloc[:, 1].values, dtype=torch.long)
 measure_type_val_tensor = torch.tensor(meta_val.iloc[:, 2].values, dtype=torch.long)
-predicted_substance_val_tensor = torch.tensor(meta_val.iloc[:, 3].values, dtype=torch.long)
+predicted_substance_val_tensor = torch.tensor(meta_val.iloc[:, -87:].values, dtype=torch.float32)
 spec_val_tensor = torch.tensor(spec_val.values, dtype=torch.float32)
 y_val_tensor = torch.tensor(y_val.values, dtype=torch.float32).view(-1, 1)
 
@@ -49,7 +48,7 @@ y_val_tensor = torch.tensor(y_val.values, dtype=torch.float32).view(-1, 1)
 device_serial_test_tensor = torch.tensor(meta_test.iloc[:, 0].values, dtype=torch.long)
 substance_form_test_tensor = torch.tensor(meta_test.iloc[:, 1].values, dtype=torch.long)
 measure_type_test_tensor = torch.tensor(meta_test.iloc[:, 2].values, dtype=torch.long)
-predicted_substance_test_tensor = torch.tensor(meta_test.iloc[:, 3].values, dtype=torch.long)
+predicted_substance_test_tensor = torch.tensor(meta_test.iloc[:, -87:].values, dtype=torch.float32)
 spec_test_tensor = torch.tensor(spec_test.values, dtype=torch.float32)
 y_test_tensor = torch.tensor(y_test.values, dtype=torch.float32).view(-1, 1)
 
@@ -91,17 +90,16 @@ class EarlyStopping:
 num_devices = metadata.iloc[:, 0].nunique()
 num_substance_forms = metadata.iloc[:, 1].nunique()
 num_measure_types = metadata.iloc[:, 2].nunique()
-num_predicted_substance = 87
 spectrum_input_size = spec_train.shape[1]
 
-model = FCCNNModel(num_devices, num_substance_forms, num_measure_types, num_predicted_substance)
+model = FCCNNModel(num_devices, num_substance_forms, num_measure_types)
 
 # Define Loss and Optimizer
 criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0005)
+optimizer = optim.Adam(model.parameters(), lr=0.0003)
 
 # Train Model
-early_stopping = EarlyStopping(patience=20, delta=0, path='best_model.pth')
+early_stopping = EarlyStopping(patience=50, delta=0, path='best_model.pth')
 
 num_epochs = 1000
 for epoch in range(num_epochs):
@@ -114,9 +112,9 @@ for epoch in range(num_epochs):
 
     model.train()
     train_loss = 0
-    for batch_device, batch_form, batch_type, batch_predicted_substance, batch_spec, batch_y in train_loader:
+    for batch_device, batch_form, batch_type, batch_ir_predictions, batch_spec, batch_y in train_loader:
 
-        outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_predicted_substance))
+        outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_ir_predictions))
         loss = criterion(outputs, batch_y)
         
         optimizer.zero_grad()
@@ -135,8 +133,8 @@ for epoch in range(num_epochs):
     model.eval()
     val_loss = 0
     with torch.no_grad():
-        for batch_device, batch_form, batch_type, batch_predicted_substance, batch_spec, batch_y in val_loader:
-            outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_predicted_substance))
+        for batch_device, batch_form, batch_type, batch_ir_predictions, batch_spec, batch_y in val_loader:
+            outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_ir_predictions))
             loss = criterion(outputs, batch_y)
             val_loss += loss.item()
             
@@ -171,8 +169,8 @@ total_samples = 0
 y_pred = []
 y_true = []
 with torch.no_grad():
-    for batch_device, batch_form, batch_type, batch_predicted_substance, batch_spec, batch_y in test_loader:
-        outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_predicted_substance))
+    for batch_device, batch_form, batch_type, batch_ir_predictions, batch_spec, batch_y in test_loader:
+        outputs = model((batch_spec, batch_device, batch_form, batch_type, batch_ir_predictions))
         y_pred.extend(outputs.view(-1).cpu().numpy())
         y_true.extend(batch_y.view(-1).cpu().numpy())
 

@@ -8,8 +8,7 @@ from FCCNNModel import FCCNNModel
 model = FCCNNModel(
     48,  # 48 device serial classes
     3,  # 3 substance form classes
-    2,  # 2 measure type classes
-    87, # 87 substance prediction classes
+    2  # 2 measure type classes
 )
 
 with open('encoders.pkl', 'rb') as f:
@@ -26,17 +25,19 @@ file_path = '../data/test.csv'  # Adjust path if necessary
 data = utils.pre_process_data(file_path, False, True, False, encoders)
 
 # Split metadata and spectrum
-metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -1]], axis=1)  # Assuming first three columns are metadata and last is predicted substance
-spectrum = data.iloc[:, 3:].drop(columns='predicted_substance')  # All columns except target
+metadata = pd.concat([data.iloc[:, :3], data.iloc[:, -87:]], axis=1) # Assuming first three columns are metadata and last is predicted substance
+spectrum = data.iloc[:, 3:].iloc[:, :-87] # All columns except target
+
 
 # Convert data to tensors
 device_serial_test_tensor = torch.tensor(metadata['device_serial'].values, dtype=torch.long)
 substance_form_test_tensor = torch.tensor(metadata['substance_form_display'].values, dtype=torch.long)
 measure_type_test_tensor = torch.tensor(metadata['measure_type_display'].values, dtype=torch.long)
-predicted_substance_test_tensor = torch.tensor(metadata['predicted_substance'].values, dtype=torch.long)
+predicted_substance_test_tensor = torch.tensor(metadata.iloc[:, -87:].values, dtype=torch.float32)
 spec_test_tensor = torch.tensor(spectrum.values, dtype=torch.float32)
 
 # Print debug information
+
 print(f"Max index in test measure_type: {metadata['measure_type_display'].max()}")
 print(f"Embedding size for measure_type: {model.measure_type_embedding.num_embeddings}")
 print(f"Max index in test device_serial: {metadata['device_serial'].max()}")

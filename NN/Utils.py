@@ -71,9 +71,9 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
         ir_data_scaled = torch.tensor(ir_data_scaled)
 
         with torch.no_grad():
-            predictions = substance_model(ir_data_scaled)
-            predicted_classes = predictions.argmax(dim=1).tolist()
-        df['predicted_substance'] = predicted_classes
+            predictions = pd.read_csv("../data/predictions_substances.csv")
+            predictions = predictions.drop(columns=['index'])
+            df = pd.concat([df, predictions], axis=1)
 
     return df
 

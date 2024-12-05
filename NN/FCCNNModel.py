@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class FCCNNModel(nn.Module):
-    def __init__(self, num_devices, num_substance_forms, num_measure_types, num_substances):
+    def __init__(self, num_devices, num_substance_forms, num_measure_types):
         super(FCCNNModel, self).__init__()
         
         # Spectrum Module
@@ -22,11 +22,11 @@ class FCCNNModel(nn.Module):
         self.device_embedding = nn.Embedding(num_devices, 8)
         self.substance_form_embedding = nn.Embedding(num_substance_forms, 1)
         self.measure_type_embedding = nn.Embedding(num_measure_types, 1)
-        self.predicted_substance_embedding = nn.Embedding(num_substances, 43)
-        
+        self.ir_dim_reduc = nn.Linear(87, 48)
+
         # Metadata Fully Connected
         self.metadata_fc = nn.Sequential(
-            nn.Linear(8 + 1 + 1 + 43, 64),
+            nn.Linear(8 + 1 + 1 + 48, 64),
             nn.ReLU(),
             nn.Dropout(0.5)
         )
@@ -46,7 +46,7 @@ class FCCNNModel(nn.Module):
         )
     
     def forward(self, inputs):
-        spectrum, device_serial, substance_form, measure_type, predicted_substance = inputs
+        spectrum, device_serial, substance_form, measure_type, ir_predictions = inputs
         
         # Spectrum through CNN
         spectrum = spectrum.unsqueeze(1)  # Add channel dimension
@@ -56,10 +56,10 @@ class FCCNNModel(nn.Module):
         device_embed = self.device_embedding(device_serial)
         substance_form_embed = self.substance_form_embedding(substance_form)
         measure_type_embed = self.measure_type_embedding(measure_type)
-        predicted_substance_embed = self.predicted_substance_embedding(predicted_substance)
-        
+        ir_reduced = self.ir_dim_reduc(ir_predictions)
+
         # Combine metadata embeddings
-        metadata = torch.cat([device_embed, substance_form_embed, measure_type_embed, predicted_substance_embed], dim=1)
+        metadata = torch.cat([device_embed, substance_form_embed, measure_type_embed, ir_reduced], dim=1)
         metadata_features = self.metadata_fc(metadata)  # Output size: (B, 16)
         #metadata_features = self.metadata_projection(metadata_features)  # Output size: (B, 960)
         

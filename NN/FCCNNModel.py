@@ -22,21 +22,30 @@ class FCCNNModel(nn.Module):
         self.device_embedding = nn.Embedding(num_devices, 8)
         self.substance_form_embedding = nn.Embedding(num_substance_forms, 1)
         self.measure_type_embedding = nn.Embedding(num_measure_types, 1)
-        self.ir_dim_reduc = nn.Linear(87, 48)
+        self.ir_dim_reduc = nn.Sequential(
+            nn.Linear(87, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(128, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.5)
+        )
 
         # Metadata Fully Connected
         self.metadata_fc = nn.Sequential(
-            nn.Linear(8 + 1 + 1 + 48, 64),
+            nn.Linear(8 + 1 + 1 + 256, 512),
             nn.ReLU(),
             nn.Dropout(0.5)
         )
         
         # Metadata Projection to Match Spectrum Features
-        self.metadata_projection = nn.Linear(64, 128)
+        self.metadata_projection = nn.Linear(128, 256)
 
         # Fully Connected Layer
         self.fc = nn.Sequential(
-            nn.Linear(1056, 128),  # Adjust for concatenated input
+            nn.Linear(1504, 128),  # Adjust for concatenated input
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),

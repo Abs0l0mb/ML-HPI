@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class IRClassificationCNN(nn.Module):
-    def __init__(self, input_size, num_classes):
+    def __init__(self, num_classes):
         super(IRClassificationCNN, self).__init__()
         
         self.cnn = nn.Sequential(

@@ -95,7 +95,7 @@ spectrum_input_size = spec_train.shape[1]
 model = FCCNNModel(num_devices, num_substance_forms, num_measure_types)
 
 # Define Loss and Optimizer
-criterion = nn.MSELoss()
+criterion = nn.HuberLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.0003)
 
 # Train Model

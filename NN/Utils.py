@@ -62,7 +62,7 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
         df_substances = pd.read_csv('../data/substances.csv')
         num_substance_classes = df_substances.iloc[:, 0].nunique()
 
-        substance_model = IRClassificationCNN(125, num_substance_classes)
+        substance_model = IRClassificationCNN(num_substance_classes)
         substance_model.load_state_dict(torch.load("ir_classification_cnn.pth"))
         substance_model.eval()
 
@@ -72,6 +72,7 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
 
         with torch.no_grad():
             predictions = pd.read_csv("../data/predictions_substances.csv")
+            #predictions = pd.read_csv("../data/test_predictions_substances.csv")
             predictions = predictions.drop(columns=['index'])
             df = pd.concat([df, predictions], axis=1)
 

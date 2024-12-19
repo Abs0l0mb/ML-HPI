@@ -6,6 +6,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 from IRCNNModel import IRClassificationCNN
+import numpy as np
+
+# Set random seeds for reproducibility
+seed = 42  # Choose any fixed number for the seed
+np.random.seed(seed)  # For NumPy
+torch.manual_seed(seed)  # For PyTorch CPU
+torch.cuda.manual_seed(seed)  # For PyTorch GPU
+torch.cuda.manual_seed_all(seed)  # For all GPUs if using multiple
+torch.backends.cudnn.deterministic = True  # Ensure deterministic operations in CUDA
+torch.backends.cudnn.benchmark = False  # Avoid non-deterministic algorithms in CUDA
+
+def worker_init_fn(worker_id):
+    np.random.seed(seed + worker_id)  # You can use the same seed or modify it slightly for each worker
 
 # Load the dataset
 file_path = '../data/substances.csv'
@@ -38,12 +51,12 @@ y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 # Create DataLoader for batching
 train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
 test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=worker_init_fn)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=worker_init_fn)
 
 # Initialize the model
 num_classes = len(label_encoder.classes_)
-model = IRClassificationCNN(input_size=125, num_classes=num_classes)
+model = IRClassificationCNN(num_classes=num_classes)
 
 # Define loss and optimizer
 criterion = nn.CrossEntropyLoss()

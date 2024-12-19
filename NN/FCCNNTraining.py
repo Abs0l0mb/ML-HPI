@@ -7,6 +7,20 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import mean_squared_error
 from FCCNNModel import FCCNNModel
+import numpy as np
+
+# Set random seeds for reproducibility
+seed = 42  # Choose any fixed number for the seed
+
+torch.manual_seed(seed)  # For PyTorch CPU
+torch.cuda.manual_seed(seed)  # For PyTorch GPU
+torch.cuda.manual_seed_all(seed)  # For all GPUs if using multiple
+torch.backends.cudnn.deterministic = True  # Ensure deterministic operations in CUDA
+torch.backends.cudnn.benchmark = False  # Avoid non-deterministic algorithms in CUDA
+
+# Define worker_init_fn to ensure reproducibility with DataLoader
+def worker_init_fn(worker_id):
+    np.random.seed(seed + worker_id)  # You can use the same seed or modify it slightly for each worker
 
 # Load and Preprocess Data
 file_path = '../data/train.csv'  # Adjust path if necessary
@@ -57,9 +71,9 @@ train_dataset = TensorDataset(device_serial_tensor, substance_form_tensor, measu
 val_dataset = TensorDataset(device_serial_val_tensor, substance_form_val_tensor, measure_type_val_tensor, predicted_substance_val_tensor, spec_val_tensor, y_val_tensor)
 test_dataset = TensorDataset(device_serial_test_tensor, substance_form_test_tensor, measure_type_test_tensor, predicted_substance_test_tensor, spec_test_tensor, y_test_tensor)
 
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, worker_init_fn=worker_init_fn)
+val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, worker_init_fn=worker_init_fn)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, worker_init_fn=worker_init_fn)
 
 class EarlyStopping:
     def __init__(self, patience=5, delta=0, path='best_model.pth'):

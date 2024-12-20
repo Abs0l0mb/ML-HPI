@@ -38,7 +38,7 @@ def pre_process_data(file_path: str, transform_spectrum: bool, add_substance_cla
     # Tranform spectrum
     if transform_spectrum:
         spectrum = df.iloc[:, 4:]
-        spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 0), columns=spectrum.columns)
+        spectrum_filtered = pd.DataFrame(savgol_filter(spectrum, 7, 3, deriv = 2, axis = 1), columns=spectrum.columns)
         spectrum_filtered_standardized = pd.DataFrame(zscore(spectrum_filtered, axis = 1), columns=spectrum.columns)
         df = pd.concat([df.iloc[:, :4], spectrum_filtered_standardized], axis=1)
 

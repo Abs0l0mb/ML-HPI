@@ -7,8 +7,6 @@ from sklearn.metrics import accuracy_score, classification_report
 file_path = '../data/substances.csv'
 data = pd.read_csv(file_path)
 
-print(data.head())
-
 target_column = 'substance'
 X = data.drop(columns=[target_column])
 y = data[target_column]
@@ -33,7 +31,7 @@ accuracy = accuracy_score(y_test, y_pred)
 print(f"Accuracy: {accuracy:.4f}")
 
 unique_labels = sorted(set(y_test))
-print(classification_report(y_test, y_pred, target_names=label_encoder.classes_[unique_labels], labels=unique_labels))
+#print(classification_report(y_test, y_pred, target_names=label_encoder.classes_[unique_labels], labels=unique_labels))
 
 
 # Save the model

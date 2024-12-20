@@ -2,7 +2,7 @@ import optuna
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.metrics import make_scorer
-import RF.Utils as Utils
+import Utils as Utils
 
 # Optuna objective function
 def objective(trial):
@@ -24,7 +24,7 @@ def objective(trial):
     cv_score = cross_val_score(model, X_train, y_train, cv=5, scoring=custom_scorer).mean()
     return cv_score
 
-data = Utils.pre_process_data("../data/train.csv", False)
+data = Utils.pre_process_data("../data/train.csv", True, False)
 X = data.drop(columns=['PURITY'])
 y = data['PURITY']
 
@@ -40,7 +40,7 @@ X_test_pca = pca.transform(X_test)
 '''
 
 study = optuna.create_study(direction="maximize")
-study.optimize(Utils.objective, n_trials=30)
+study.optimize(objective, n_trials=30)
 
 best_params = study.best_params
 print("Best Parameters:", best_params)
